@@ -1,0 +1,109 @@
+name: Build OpenWrt ARM64
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build easytier-core and easytier-cli
+    runs-on: ubuntu-24.04
+
+    env:
+      CARGO_TERM_COLOR: always
+      TARGET: aarch64-unknown-linux-musl
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            lld \
+            pkg-config \
+            protobuf-compiler \
+            curl \
+            xz-utils
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: 1.95
+          target: aarch64-unknown-linux-musl
+          cache: true
+          rustflags: ''
+
+      - name: Setup protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: '35.1'
+          repo-token: ${{ github.token }}
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+          use-cache: true
+
+      - name: Install cargo-zigbuild
+        run: |
+          cargo +1.95 install cargo-zigbuild --version 0.23.2
+
+      - name: Build easytier-core and easytier-cli
+        run: |
+          cargo +1.95 zigbuild \
+            --release \
+            --target "$TARGET" \
+            --package easytier \
+            --features mimalloc
+
+      - name: Verify binaries
+        run: |
+          file target/$TARGET/release/easytier-core
+          file target/$TARGET/release/easytier-cli
+
+          test -x target/$TARGET/release/easytier-core
+          test -x target/$TARGET/release/easytier-cli
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p artifact
+
+          cp target/$TARGET/release/easytier-core artifact/
+          cp target/$TARGET/release/easytier-cli artifact/
+
+          chmod 0755 artifact/easytier-core
+          chmod 0755 artifact/easytier-cli
+
+          tar -czf easytier-openwrt-aarch64.tar.gz \
+            -C artifact \
+            easytier-core \
+            easytier-cli
+
+          sha256sum \
+            artifact/easytier-core \
+            artifact/easytier-cli \
+            easytier-openwrt-aarch64.tar.gz \
+            > easytier-openwrt-aarch64.sha256
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: easytier-openwrt-aarch64
+          path: |
+            artifact/easytier-core
+            artifact/easytier-cli
+            easytier-openwrt-aarch64.tar.gz
+            easytier-openwrt-aarch64.sha256
+          if-no-files-found: error

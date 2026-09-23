@@ -27,7 +27,6 @@ jobs:
           set -euxo pipefail
 
           sudo apt-get update
-
           sudo apt-get install -y \
             build-essential \
             clang \
@@ -63,7 +62,7 @@ jobs:
           version: '35.1'
           repo-token: ${{ github.token }}
 
-      - name: Download MIPS soft-float musl toolchain
+      - name: Download MIPS musl toolchain
         shell: bash
         run: |
           set -euxo pipefail
@@ -77,14 +76,15 @@ jobs:
             "https://github.com/cross-tools/musl-cross/releases/download/20250520/mips-unknown-linux-muslsf.tar.xz"
 
           echo "=== archive listing ==="
-          tar -tf "$ARCHIVE" | head -50
+          tar -tf "$ARCHIVE" > "$WORK/archive-list.txt"
+          sed -n '1,50p' "$WORK/archive-list.txt"
 
           tar -xf "$ARCHIVE" -C "$WORK"
 
           echo "=== gcc files ==="
           find "$WORK" -type f -name '*gcc' -print
 
-          GCC_PATH="$(find "$WORK" -type f -name '*gcc' | head -n 1)"
+          GCC_PATH="$(find "$WORK" -type f -name '*gcc' -print -quit)"
 
           if [ -z "$GCC_PATH" ]; then
             echo "ERROR: no GCC compiler found"
@@ -137,6 +137,9 @@ jobs:
           RUSTC_BOOTSTRAP: 1
         run: |
           set -euxo pipefail
+
+          echo "Using linker: ${CARGO_TARGET_MIPS_UNKNOWN_LINUX_MUSL_LINKER:-unknown}"
+          echo "CC=${CC:-unknown}"
 
           cargo +1.95 build \
             --release \
